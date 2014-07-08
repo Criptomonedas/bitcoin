@@ -207,6 +207,7 @@ std::string HelpMessage(HelpMessageMode mode)
     string strUsage = _("Options:") + "\n";
     strUsage += "  -?                     " + _("This help message") + "\n";
     strUsage += "  -alertnotify=<cmd>     " + _("Execute command when a relevant alert is received or we see a really long fork (%s in cmd is replaced by message)") + "\n";
+    strUsage += "  -allowpruned           " + _("Allows the node to run on a pruned state") + "\n";
     strUsage += "  -blocknotify=<cmd>     " + _("Execute command when the best block changes (%s in cmd is replaced by block hash)") + "\n";
     strUsage += "  -checkblocks=<n>       " + _("How many blocks to check at startup (default: 288, 0 = all)") + "\n";
     strUsage += "  -checklevel=<n>        " + _("How thorough the block verification of -checkblocks is (0-4, default: 3)") + "\n";
@@ -615,7 +616,12 @@ bool AppInit2(boost::thread_group& threadGroup)
     fLogTimestamps = GetBoolArg("-logtimestamps", true);
     fLogIPs = GetBoolArg("-logips", false);
     setvbuf(stdout, NULL, _IOLBF, 0);
+    fAllowPruned = GetBoolArg("-allowpruned", false);
 #ifdef ENABLE_WALLET
+    if (fAllowPruned) {
+        if (SoftSetBoolArg("-disablewallet", true))
+            LogPrintf("AppInit2 : parameter interaction: -allowpruned=1 -> setting -disablewallet=1\n");
+    }
     bool fDisableWallet = GetBoolArg("-disablewallet", false);
 #endif
 

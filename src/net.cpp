@@ -1761,8 +1761,13 @@ void StartNode(boost::thread_group& threadGroup)
         semOutbound = new CSemaphore(nMaxOutbound);
     }
 
-    if (pnodeLocalHost == NULL)
+    if (pnodeLocalHost == NULL) {
+        if (fPruned) {
+            // unsetting NODE_NETWORK on pruned state
+            nLocalServices &= ~NODE_NETWORK;
+        }
         pnodeLocalHost = new CNode(INVALID_SOCKET, CAddress(CService("127.0.0.1", 0), nLocalServices));
+    }
 
     Discover(threadGroup);
 
