@@ -96,6 +96,8 @@ static const unsigned int MAX_HEADERS_RESULTS = 2000;
 static const unsigned int BLOCK_DOWNLOAD_WINDOW = 1024;
 /** Time to wait (in seconds) between writing blockchain state to disk. */
 static const unsigned int DATABASE_WRITE_INTERVAL = 3600;
+/** Minimum amount of blocks to keep unpruned, needed to afford deep reorganizations. */
+static const unsigned int MIN_BLOCKS_TO_KEEP = 288;
 
 /** "reject" message codes **/
 static const unsigned char REJECT_MALFORMED = 0x01;
@@ -130,6 +132,7 @@ extern bool fTxIndex;
 extern bool fIsBareMultisigStd;
 extern unsigned int nCoinCacheSize;
 extern CFeeRate minRelayTxFee;
+extern bool fPruned;
 
 // Best header we've seen so far (used for getheaders queries' starting points).
 extern CBlockIndex *pindexBestHeader;
