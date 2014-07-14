@@ -3458,10 +3458,10 @@ void static ProcessGetData(CNode* pfrom)
                     {
                         if (fPruned)
                         {
-                            // Disconnect a peer which asks us for a block we don't have any more, not to stall
-                            // his download. He shouldn't ask, anyway, as we unset NODE_NETWORK on this mode.
-                            LogPrintf("cannot load block from disk, disconnecting peer=%d\n", pfrom->id);
-                            pfrom->fDisconnect = true;
+                            // Reject requests from  peers asking us for blocks we don't have.
+                            // They shouldn't ask, anyway, as we unset NODE_NETWORK on this mode.
+                            LogPrintf("cannot load block from disk, rejecting request from peer:%d\n", pfrom->id);
+                            pfrom->PushMessage("reject", string("getdata"), REJECT_DONTHAVE, string("Do not have block"));
                         }
                         else
                             assert(!"cannot load block from disk");
