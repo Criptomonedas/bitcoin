@@ -51,7 +51,7 @@ bool fReindex = false;
 bool fTxIndex = false;
 bool fIsBareMultisigStd = true;
 unsigned int nCoinCacheSize = 5000;
-bool fPruned = false;
+uintmax_t nPrune = 0;
 
 
 /** Fees smaller than this (in satoshi) are considered zero fee (for relaying and mining) */
@@ -66,6 +66,7 @@ struct COrphanTx {
 map<uint256, COrphanTx> mapOrphanTransactions;
 map<uint256, set<uint256> > mapOrphanTransactionsByPrev;
 void EraseOrphansFor(NodeId peer);
+set<int> setDataFilePrunable, setUndoFilePrunable;
 
 // Constant stuff for coinbase transactions we create:
 CScript COINBASE_FLAGS;
@@ -2691,11 +2692,40 @@ uint256 CPartialMerkleTree::ExtractMatches(std::vector<uint256> &vMatch) {
     return hashMerkleRoot;
 }
 
+bool RemoveDiskFile(int nFile, const char* prefix)
+{
+    CDiskBlockPos pos(nFile, 0);
+    if (boost::filesystem::remove(GetBlockPosFilename(pos, prefix))) {
+        LogPrintf("File %s removed\n", GetBlockPosFilename(pos, prefix));
+        return true;
+    }
+    LogPrintf("Error removing file %s\n", GetBlockPosFilename(pos, prefix));
+    return false;
+}
+
+bool RemoveBlockFile(int nFile)
+{
+    return RemoveDiskFile(nFile, "blk");
+}
+
+bool RemoveUndoFile(int nFile)
+{
+    return RemoveDiskFile(nFile, "rev");
+}
 
 
 
+bool PruneBlockFiles()
+{
+    if (!CheckBlockFiles())
+        return false;
+    if (!setDataFilePrunable.empty() && RemoveBlockFile(*setDataFilePrunable.rbegin()))
+            return true;
+    if (!setUndoFilePrunable.empty() && RemoveUndoFile(*setUndoFilePrunable.begin()))
+            return true;
 
-
+    return false;
+}
 
 bool AbortNode(const std::string &strMessage, const std::string &userMessage) {
     strMiscWarning = strMessage;
@@ -2707,8 +2737,25 @@ bool AbortNode(const std::string &strMessage, const std::string &userMessage) {
     return false;
 }
 
+uintmax_t BlockFilesSize()
+{
+    uintmax_t size = 0;
+    for (boost::filesystem::directory_iterator it = boost::filesystem::directory_iterator(GetDataDir() / "blocks") ; it != boost::filesystem::directory_iterator() ; it++) {
+        if (boost::filesystem::exists(it->path()) && !boost::filesystem::is_directory(it->path()))
+            size += boost::filesystem::file_size(it->path());
+    }
+    return size;
+}
+
 bool CheckDiskSpace(uint64_t nAdditionalBytes)
 {
+    if (nPrune) {
+        while (BlockFilesSize() + nAdditionalBytes > nPrune) {
+            if (!PruneBlockFiles())
+                return AbortNode("Can't keep block files size as low as requested", _("Can't keep block files size as low as requested"));
+        }
+    }
+
     uint64_t nFreeBytesAvailable = filesystem::space(GetDataDir()).available;
 
     // Check for nMinDiskSpace bytes (currently 50MB)
@@ -2874,34 +2921,49 @@ bool DataFilesReadable(int nFile)
     return false;
 }
 
+int LastBlockInFile(int nFile)
+{
+    return vinfoBlockFile[nFile].nHeightLast;
+}
+
+
 bool CheckBlockFiles()
 {
     // Check presence of blk files
-    int nKeepBlksFromHeight = fPruned ? (max((int)(chainActive.Height() - MIN_BLOCKS_TO_KEEP), 0)) : 0;
-    LogPrintf("Checking all required data for active chain is available (mandatory from height %i to %i)\n", nKeepBlksFromHeight, max(chainActive.Height(), 0));
+    int nKeepMinBlksFromHeight = nPrune ? (max((int)(chainActive.Height() - MIN_BLOCKS_TO_KEEP), 0)) : 0;
+    LogPrintf("Checking all required data for active chain is available (mandatory from height %i to %i)\n", nKeepMinBlksFromHeight, max(chainActive.Height(), 0));
     map<int, bool> mapDataFileReadable, mapUndoFileReadable;
     set<int> setRequiredDataFilesReadable, setDataPruned, setUndoPruned;
+    setDataFilePrunable.clear();
+    setUndoFilePrunable.clear();
     for (CBlockIndex* pindex = chainActive.Tip(); pindex && pindex->pprev; pindex = pindex->pprev) {
-        if (pindex->nHeight > nKeepBlksFromHeight) {
+        if (pindex->nHeight > nKeepMinBlksFromHeight) {
             if (!(pindex->nStatus & BLOCK_HAVE_DATA) || !(pindex->nStatus & BLOCK_HAVE_UNDO)) { // Fail immediately if required data is missing
                 LogPrintf("Error: Missing data for required block: %i\n", pindex->nHeight);
                 return false;
             } else if (!setRequiredDataFilesReadable.count(pindex->nFile)) {
-                if (DataFilesReadable(pindex->nFile))
-                    setRequiredDataFilesReadable.insert(pindex->nFile);
-                else { // Or if data is unredable
+                if (!DataFilesReadable(pindex->nFile)) { // Or if data is unreadable
                     LogPrintf("Error: Required file for block: %i is unreadable\n", pindex->nHeight);
                     return false;
+                } else
+                    setRequiredDataFilesReadable.insert(pindex->nFile);
+            }
+        } else { // Check consistency and pruneability of unrequired data
+            if (pindex->nStatus & BLOCK_HAVE_DATA) {
+                if (!mapDataFileReadable.count(pindex->nFile)) {
+                    mapDataFileReadable[pindex->nFile] = BlockFileIsReadable(pindex->nFile);
+                    if (mapDataFileReadable.find(pindex->nFile)->second && chainActive.Height() > AUTOPRUNE_AFTER_HEIGHT && LastBlockInFile(pindex->nFile) < nKeepMinBlksFromHeight) { // Mark pruneable data
+                        setDataFilePrunable.insert(pindex->nFile);
+                    }
                 }
             }
-        } else { // Check consistency or unrequired data
-            if (pindex->nStatus & BLOCK_HAVE_DATA) {
-                if (!mapDataFileReadable.count(pindex->nFile))
-                    mapDataFileReadable[pindex->nFile] = BlockFileIsReadable(pindex->nFile);
-            }
             if (pindex->nStatus & BLOCK_HAVE_UNDO) {
-                if (!mapUndoFileReadable.count(pindex->nFile))
+                if (!mapUndoFileReadable.count(pindex->nFile)) {
                     mapUndoFileReadable[pindex->nFile] = UndoFileIsReadable(pindex->nFile);
+                    if (mapUndoFileReadable.find(pindex->nFile)->second && chainActive.Height() > AUTOPRUNE_AFTER_HEIGHT && LastBlockInFile(pindex->nFile) < nKeepMinBlksFromHeight) { // Mark pruneable data
+                        setUndoFilePrunable.insert(pindex->nFile);
+                    }
+                }
             }
         }
         bool fWrite = false;
@@ -3373,7 +3435,7 @@ void static ProcessGetData(CNode* pfrom)
                     // Send block from disk
                     CBlock block;
                     if (!ReadBlockFromDisk(block, (*mi).second)) {
-                        if (fPruned) {
+                        if (nPrune) {
                             // Disconnect peers asking us for blocks we don't have, not to stall their IBD. They shouldn't ask as we unset NODE_NETWORK on this mode.
                             LogPrintf("cannot load block from disk, answering notfound, and disconnecting peer:%d\n", pfrom->id);
                             vNotFound.push_back(inv);
