@@ -51,7 +51,7 @@ bool fReindex = false;
 bool fTxIndex = false;
 bool fIsBareMultisigStd = true;
 unsigned int nCoinCacheSize = 5000;
-bool fPruned = false;
+uintmax_t nPrune = 0;
 
 
 /** Fees smaller than this (in satoshi) are considered zero fee (for relaying and mining) */
@@ -66,6 +66,7 @@ struct COrphanTx {
 map<uint256, COrphanTx> mapOrphanTransactions;
 map<uint256, set<uint256> > mapOrphanTransactionsByPrev;
 void EraseOrphansFor(NodeId peer);
+set<int> setDataFilePrunable, setUndoFilePrunable;
 
 // Constant stuff for coinbase transactions we create:
 CScript COINBASE_FLAGS;
@@ -2786,11 +2787,81 @@ uint256 CPartialMerkleTree::ExtractMatches(std::vector<uint256> &vMatch) {
     return hashMerkleRoot;
 }
 
+void ClearBlockFileInfo(int nFile)
+{
+    LOCK(cs_main);
+    if (vinfoBlockFile[nFile].nUndoSize)
+        vinfoBlockFile[nFile].nSize = 0;
+    else
+        vinfoBlockFile[nFile].SetNull();
+    if (!pblocktree->WriteBlockFileInfo(nFile, vinfoBlockFile[nFile]))
+        AbortNode("Error Writing Block Info\n");
+}
+
+void ClearUndoFileInfo(int nFile)
+{
+    LOCK(cs_main);
+    if (vinfoBlockFile[nFile].nSize)
+        vinfoBlockFile[nFile].nUndoSize = 0;
+    else
+        vinfoBlockFile[nFile].SetNull();
+    if (!pblocktree->WriteBlockFileInfo(nFile, vinfoBlockFile[nFile]))
+        AbortNode("Error Writing Block Info\n");
+}
+
+enum BlockOrUndo {
+    BLOCK = false,
+    UNDO = true
+};
+
+bool RemoveDiskFile(int nFile, BlockOrUndo blockOrUndo)
+{
+    LOCK(cs_main);
+    CDiskBlockPos pos(nFile, 0);
+    const char* prefix = blockOrUndo ? "rev" : "blk";
+    if (boost::filesystem::remove(GetBlockPosFilename(pos, prefix))) {
+        LogPrintf("File %s removed\n", GetBlockPosFilename(pos, prefix));
+        blockOrUndo ? ClearUndoFileInfo(nFile) : ClearBlockFileInfo(nFile);
+        return true;
+    }
+    LogPrintf("Error removing file %s\n", GetBlockPosFilename(pos, prefix));
+    return false;
+}
+
+bool RemoveBlockFile(int nFile)
+{
+    return RemoveDiskFile(nFile, BLOCK);
+}
+
+bool RemoveUndoFile(int nFile)
+{
+    return RemoveDiskFile(nFile, UNDO);
+}
 
 
 
-
-
+bool PruneBlockFiles()
+{
+    if (!CheckBlockFiles())
+        return false;
+    if (setDataFilePrunable.empty() && setUndoFilePrunable.empty()) {
+        LogPrintf("There's nothing to prune.\n");
+        return false;
+    }
+    bool fFileRemoved = false;
+    int dataPrunable = *setDataFilePrunable.begin(), undoPrunable = *setUndoFilePrunable.begin();
+    if (dataPrunable < undoPrunable) {
+        fFileRemoved = RemoveBlockFile(dataPrunable);
+    } else if (undoPrunable < dataPrunable) {
+        fFileRemoved = RemoveUndoFile(undoPrunable);
+    } else
+        fFileRemoved = (RemoveBlockFile(dataPrunable) | RemoveUndoFile(undoPrunable));
+    if (fFileRemoved) {
+        CheckBlockFiles();
+        return true;
+    }
+    return false;
+}
 
 bool AbortNode(const std::string &strMessage, const std::string &userMessage) {
     strMiscWarning = strMessage;
@@ -2802,8 +2873,25 @@ bool AbortNode(const std::string &strMessage, const std::string &userMessage) {
     return false;
 }
 
+uintmax_t BlockFilesSize()
+{
+    uintmax_t size = 0;
+    BOOST_FOREACH(CBlockFileInfo file, vinfoBlockFile)
+        size += file.nSize + file.nUndoSize;
+    return size;
+}
+
 bool CheckDiskSpace(uint64_t nAdditionalBytes)
 {
+    if (nPrune) {
+        while (BlockFilesSize() + nAdditionalBytes > nPrune) {
+            if (!PruneBlockFiles()) {
+                LogPrintf("Warning: Can't keep block files size as low as requested\n");
+                break;
+            }
+        }
+    }
+
     uint64_t nFreeBytesAvailable = filesystem::space(GetDataDir()).available;
 
     // Check for nMinDiskSpace bytes (currently 50MB)
@@ -2956,12 +3044,16 @@ bool static LoadBlockIndexDB()
 bool BlockFileIsOpenable(int nFile)
 {
     CDiskBlockPos pos(nFile, 0);
+    if (!vinfoBlockFile[nFile].nSize && !boost::filesystem::exists(GetBlockPosFilename(pos, "blk")))
+        return false;
     return !CAutoFile(OpenBlockFile(pos, true), SER_DISK, CLIENT_VERSION).IsNull();
 }
 
 bool UndoFileIsOpenable(int nFile)
 {
     CDiskBlockPos pos(nFile, 0);
+    if (!vinfoBlockFile[nFile].nUndoSize && !boost::filesystem::exists(GetBlockPosFilename(pos, "rev")))
+        return false;
     return !CAutoFile(OpenUndoFile(pos, true), SER_DISK, CLIENT_VERSION).IsNull();
 }
 
@@ -2972,49 +3064,59 @@ bool DataFilesAreOpenable(int nFile)
     return false;
 }
 
+int LastBlockInFile(int nFile)
+{
+    return vinfoBlockFile[nFile].nHeightLast;
+}
+
+
 bool CheckBlockFiles()
 {
+    LOCK(cs_main);
     // Check presence of blk files
-    int nKeepBlksFromHeight = fPruned ? (max((int)(chainActive.Height() - MIN_BLOCKS_TO_KEEP), 0)) : 0;
-    LogPrintf("Checking all required data for active chain is available (mandatory from height %i to %i)\n", nKeepBlksFromHeight, max(chainActive.Height(), 0));
+    int nKeepMinBlksFromHeight = nPrune ? (max((int)(chainActive.Height() - MIN_BLOCKS_TO_KEEP), 0)) : 0;
+    LogPrintf("Checking all required data for active chain is available (mandatory from height %i to %i)\n", nKeepMinBlksFromHeight, max(chainActive.Height(), 0));
     map<int, bool> mapBlockFileIsOpenable, mapUndoFileIsOpenable;
     set<int> setRequiredDataFilesAreOpenable, setDataPruned, setUndoPruned;
+    setDataFilePrunable.clear();
+    setUndoFilePrunable.clear();
     for (CBlockIndex* pindex = chainActive.Tip(); pindex && pindex->pprev; pindex = pindex->pprev) {
-        if (pindex->nHeight > nKeepBlksFromHeight) {
+        if (pindex->nHeight > nKeepMinBlksFromHeight) {
             if (!(pindex->nStatus & BLOCK_HAVE_DATA) || !(pindex->nStatus & BLOCK_HAVE_UNDO)) { // Fail immediately if required data is missing
                 LogPrintf("Error: Required data for block: %i is missing.\n", pindex->nHeight);
                 return false;
             } else if (!setRequiredDataFilesAreOpenable.count(pindex->nFile)) {
-                if (DataFilesAreOpenable(pindex->nFile))
-                    setRequiredDataFilesAreOpenable.insert(pindex->nFile);
-                else { // Or if data is unreadable
+                if (!DataFilesAreOpenable(pindex->nFile)) { // Or if data is unreadable
                     LogPrintf("Error: Required file for block: %i can't be opened.\n", pindex->nHeight);
                     return false;
+                } else
+                    setRequiredDataFilesAreOpenable.insert(pindex->nFile);
+            }
+        } else { // Check consistency and pruneability of unrequired data
+            if (pindex->nStatus & BLOCK_HAVE_DATA) {
+                if (!mapBlockFileIsOpenable.count(pindex->nFile)) {
+                    mapBlockFileIsOpenable[pindex->nFile] = BlockFileIsOpenable(pindex->nFile);
+                    if (mapBlockFileIsOpenable[pindex->nFile] && chainActive.Height() > AUTOPRUNE_AFTER_HEIGHT && LastBlockInFile(pindex->nFile) < nKeepMinBlksFromHeight) { // Mark pruneable data
+                        setDataFilePrunable.insert(pindex->nFile);
+                    }
                 }
             }
-        } else { // Check consistency of unrequired data
-            if (pindex->nStatus & BLOCK_HAVE_DATA) {
-                if (!mapBlockFileIsOpenable.count(pindex->nFile))
-                    mapBlockFileIsOpenable[pindex->nFile] = BlockFileIsOpenable(pindex->nFile);
-            }
             if (pindex->nStatus & BLOCK_HAVE_UNDO) {
-                if (!mapUndoFileIsOpenable.count(pindex->nFile))
+                if (!mapUndoFileIsOpenable.count(pindex->nFile)) {
                     mapUndoFileIsOpenable[pindex->nFile] = UndoFileIsOpenable(pindex->nFile);
+                    if (mapUndoFileIsOpenable[pindex->nFile] && chainActive.Height() > AUTOPRUNE_AFTER_HEIGHT && LastBlockInFile(pindex->nFile) < nKeepMinBlksFromHeight) { // Mark pruneable data
+                        setUndoFilePrunable.insert(pindex->nFile);
+                    }
+                }
             }
         }
-        bool fWrite = false;
         if (mapBlockFileIsOpenable.count(pindex->nFile) && !mapBlockFileIsOpenable[pindex->nFile]) {
             pindex->nStatus &= ~BLOCK_HAVE_DATA;
-            fWrite = true;
+            setDirtyBlockIndex.insert(pindex);
         }
         if (mapUndoFileIsOpenable.count(pindex->nFile) && !mapUndoFileIsOpenable[pindex->nFile]) {
             pindex->nStatus &= ~BLOCK_HAVE_UNDO;
-            fWrite = true;
-        }
-        if (fWrite) {
-            CDiskBlockIndex blockindex(pindex);
-            if (!pblocktree->WriteBlockIndex(blockindex))
-                return false;
+            setDirtyBlockIndex.insert(pindex);
         }
         if (~pindex->nStatus & BLOCK_HAVE_DATA && pindex->nStatus & BLOCK_VALID_CHAIN)
             setDataPruned.insert(pindex->nHeight);
@@ -3475,7 +3577,7 @@ void static ProcessGetData(CNode* pfrom)
                     // Send block from disk
                     CBlock block;
                     if (!ReadBlockFromDisk(block, (*mi).second)) {
-                        if (fPruned) {
+                        if (nPrune) {
                             // Disconnect peers asking us for blocks we don't have, not to stall their IBD. They shouldn't ask as we unset NODE_NETWORK on this mode.
                             LogPrintf("cannot load block from disk, answering notfound, and disconnecting peer:%d\n", pfrom->id);
                             vNotFound.push_back(inv);
