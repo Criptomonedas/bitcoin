@@ -407,7 +407,7 @@ void FindNextBlocksToDownload(NodeId nodeid, unsigned int count, std::vector<CBl
         // are not yet downloaded and not in flight to vBlocks. In the mean time, update
         // pindexLastCommonBlock as long as all ancestors are already downloaded.
         BOOST_FOREACH(CBlockIndex* pindex, vToFetch) {
-            if (pindex->nStatus & BLOCK_HAVE_DATA) {
+            if (pindex->nStatus & BLOCK_HAVE_DATA || pindex->nStatus & BLOCK_VALID_CHAIN) {
                 if (pindex->nChainTx)
                     state->pindexLastCommonBlock = pindex;
             } else if (mapBlocksInFlight.count(pindex->GetBlockHash()) == 0) {
@@ -2390,7 +2390,7 @@ bool AcceptBlock(CBlock& block, CValidationState& state, CBlockIndex** ppindex, 
     if (!AcceptBlockHeader(block, state, &pindex))
         return false;
 
-    if (pindex->nStatus & BLOCK_HAVE_DATA) {
+    if (pindex->nStatus & BLOCK_HAVE_DATA || pindex->nStatus & BLOCK_VALID_CHAIN) {
         // TODO: deal better with duplicate blocks.
         // return state.DoS(20, error("AcceptBlock() : already have block %d %s", pindex->nHeight, pindex->GetBlockHash().ToString()), REJECT_DUPLICATE, "duplicate");
         return true;
@@ -2793,7 +2793,7 @@ bool static LoadBlockIndexDB()
     {
         CBlockIndex* pindex = item.second;
         pindex->nChainWork = (pindex->pprev ? pindex->pprev->nChainWork : 0) + pindex->GetBlockWork();
-        if (pindex->nStatus & BLOCK_HAVE_DATA) {
+        if (pindex->nStatus & BLOCK_HAVE_DATA || pindex->nStatus & BLOCK_VALID_CHAIN) {
             if (pindex->pprev) {
                 if (pindex->pprev->nChainTx) {
                     pindex->nChainTx = pindex->pprev->nChainTx + pindex->nTx;
