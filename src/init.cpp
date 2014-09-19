@@ -624,7 +624,7 @@ bool AppInit2(boost::thread_group& threadGroup)
             if (SoftSetBoolArg("-disablewallet", true))
                 LogPrintf("%s : parameter interaction: -prune -> setting -disablewallet=1\n", __func__);
             else
-                return InitError(_("Can't run with a wallet in prune mode."));
+                LogPrintf("Warning: Running with a wallet in prune mode can leave your wallet in an inconsistent state.");
         }
 #endif
     }
