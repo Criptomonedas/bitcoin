@@ -111,7 +111,7 @@ extern bool fTxIndex;
 extern bool fIsBareMultisigStd;
 extern unsigned int nCoinCacheSize;
 extern CFeeRate minRelayTxFee;
-extern int nPrune;
+extern int64_t nPrune;
 
 // Minimum disk space required - used in CheckDiskSpace()
 static const uint64_t nMinDiskSpace = 52428800;
@@ -160,7 +160,7 @@ bool InitBlockIndex();
 /** Load the block tree and coins database from disk */
 bool LoadBlockIndex();
 /** Check all required block files are present */
-bool CheckAndPruneBlockFiles();
+bool CheckBlockFiles();
 /** Unload database information */
 void UnloadBlockIndex();
 /** Print the loaded block tree */

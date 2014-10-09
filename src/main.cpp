@@ -49,7 +49,7 @@ bool fReindex = false;
 bool fTxIndex = false;
 bool fIsBareMultisigStd = true;
 unsigned int nCoinCacheSize = 5000;
-int nPrune = 0;
+int64_t nPrune = 0;
 
 /** Fees smaller than this (in satoshi) are considered zero fee (for relaying and mining) */
 CFeeRate minRelayTxFee = CFeeRate(1000);
@@ -71,6 +71,7 @@ struct COrphanTx {
 map<uint256, COrphanTx> mapOrphanTransactions;
 map<uint256, set<uint256> > mapOrphanTransactionsByPrev;
 void EraseOrphansFor(NodeId peer);
+set<int> setDataFilePrunable, setUndoFilePrunable;
 
 // Constant stuff for coinbase transactions we create:
 CScript COINBASE_FLAGS;
@@ -2187,8 +2188,6 @@ bool FindBlockPos(CValidationState &state, CDiskBlockPos &pos, unsigned int nAdd
         unsigned int nOldChunks = (pos.nPos + BLOCKFILE_CHUNK_SIZE - 1) / BLOCKFILE_CHUNK_SIZE;
         unsigned int nNewChunks = (infoLastBlockFile.nSize + BLOCKFILE_CHUNK_SIZE - 1) / BLOCKFILE_CHUNK_SIZE;
         if (nNewChunks > nOldChunks) {
-            if (!CheckAndPruneBlockFiles())
-                return state.Abort("Error checking block files");
             if (CheckDiskSpace(nNewChunks * BLOCKFILE_CHUNK_SIZE - pos.nPos)) {
                 FILE *file = OpenBlockFile(pos);
                 if (file) {
@@ -2767,11 +2766,39 @@ uint256 CPartialMerkleTree::ExtractMatches(std::vector<uint256> &vMatch) {
     return hashMerkleRoot;
 }
 
+bool RemoveDiskFile(int nFile, const char* prefix)
+{
+    CDiskBlockPos pos(nFile, 0);
+    if (boost::filesystem::remove(GetBlockPosFilename(pos, prefix))) {
+        LogPrintf("File %s removed\n", GetBlockPosFilename(pos, prefix));
+        return true;
+    }
+    LogPrintf("Error removing file %s\n", GetBlockPosFilename(pos, prefix));
+    return false;
+}
 
+bool RemoveBlockFile(int nFile)
+{
+    return RemoveDiskFile(nFile, "blk");
+}
 
+bool RemoveUndoFile(int nFile)
+{
+    return RemoveDiskFile(nFile, "rev");
+}
 
-
-
+bool PruneBlockFiles()
+{
+    if (!CheckBlockFiles())
+        return false;
+    if (!setDataFilePrunable.empty())
+        if (RemoveBlockFile(*setDataFilePrunable.rbegin()))
+            return true;
+    if (!setUndoFilePrunable.empty())
+        if (RemoveUndoFile(*setUndoFilePrunable.begin()))
+            return true;
+    return false;
+}
 
 bool AbortNode(const std::string &strMessage) {
     strMiscWarning = strMessage;
@@ -2783,12 +2810,13 @@ bool AbortNode(const std::string &strMessage) {
 
 bool CheckDiskSpace(uint64_t nAdditionalBytes)
 {
-    uint64_t nFreeBytesAvailable = filesystem::space(GetDataDir()).available;
-
-    // Check for nMinDiskSpace bytes (currently 50MB)
-    if (nFreeBytesAvailable < nMinDiskSpace + nAdditionalBytes)
-        return AbortNode(_("Error: Disk space is low!"));
-
+    if (nPrune)
+        LogPrintf("Autoprune configured to keep %iMB free on disk\n", nPrune);
+    // Check for nMinDiskSpace bytes (currently 50MB) or for user configured value, if it's greater
+    while (filesystem::space(GetDataDir()).available < max(nMinDiskSpace, (uint64_t)nPrune * 1024) + nAdditionalBytes) {
+        if (!nPrune || !PruneBlockFiles())
+            return AbortNode(_("Error: Disk space is low!"));
+    }
     return true;
 }
 
@@ -2828,26 +2856,6 @@ boost::filesystem::path GetBlockPosFilename(const CDiskBlockPos &pos, const char
     return GetDataDir() / "blocks" / strprintf("%s%05u.dat", prefix, pos.nFile);
 }
 
-bool RemoveDiskFile(int nFile, const char* prefix)
-{
-    CDiskBlockPos pos(nFile, 0);
-    if (boost::filesystem::remove(GetBlockPosFilename(pos, prefix))) {
-        LogPrintf("File %s removed\n", GetBlockPosFilename(pos, prefix));
-        return true;
-    }
-    LogPrintf("Error removing file %s\n", GetBlockPosFilename(pos, prefix));
-    return false;
-}
-
-bool RemoveBlockFile(int nFile)
-{
-    return RemoveDiskFile(nFile, "blk");
-}
-
-bool RemoveUndoFile(int nFile)
-{
-    return RemoveDiskFile(nFile, "rev");
-}
 
 CBlockIndex * InsertBlockIndex(uint256 hash)
 {
@@ -2951,28 +2959,15 @@ int LastBlockInFile(int nFile)
     return info.nHeightLast;
 }
 
-bool CheckAndPruneBlockFiles()
+
+bool CheckBlockFiles()
 {
-    // Check presence of essential data
     int nKeepMinBlksFromHeight = nPrune ? (max((int)(chainActive.Height() - MIN_BLOCKS_TO_KEEP), 0)) : 0;
-    int nAutoPruneUpToHeight = 0;
-    if (nPrune) {
-        LogPrintf("Autoprune active.\n");
-        if (nPrune > 0) {
-            LogPrintf("Autoprune configured to prune up to height: %i\n", nPrune);
-            nAutoPruneUpToHeight = min(nKeepMinBlksFromHeight, nPrune);
-        } else if (nPrune < 0) {
-            LogPrintf("Autoprune configured to keep the last: %i blocks\n", -nPrune);
-            nAutoPruneUpToHeight = min((chainActive.Height() + nPrune), nKeepMinBlksFromHeight);
-        }
-        if (chainActive.Height() < AUTOPRUNE_AFTER_HEIGHT)
-            LogPrintf("Can't start autopruning until height %i\n", AUTOPRUNE_AFTER_HEIGHT);
-        else
-            LogPrintf("Autopruning up to height %i\n", nAutoPruneUpToHeight);
-    }
     LogPrintf("Checking all required data for active chain is available (mandatory from height %i to %i)\n", nKeepMinBlksFromHeight, max(chainActive.Height(), 0));
-    map<int, bool> mapBlkDataFileReadable, mapBlkUndoFileReadable;
-    set<int> setRequiredDataFilesReadable, setBlockDataPruned, setBlockUndoPruned;
+    map<int, bool> mapDataFileReadable, mapUndoFileReadable;
+    set<int> setRequiredDataFilesReadable, setDataPruned, setUndoPruned;
+    setDataFilePrunable.clear();
+    setUndoFilePrunable.clear();
     for (CBlockIndex* pindex = chainActive.Tip(); pindex && pindex->pprev; pindex = pindex->pprev) {
         if (pindex->nHeight > nKeepMinBlksFromHeight) {
             if (!(pindex->nStatus & BLOCK_HAVE_DATA) || !(pindex->nStatus & BLOCK_HAVE_UNDO)) { // Fail immediately if required data is missing
@@ -2987,30 +2982,28 @@ bool CheckAndPruneBlockFiles()
             }
         } else { // Check consistency and pruneability of unrequired data
             if (pindex->nStatus & BLOCK_HAVE_DATA) {
-                if (!mapBlkDataFileReadable.count(pindex->nFile)) {
-                    mapBlkDataFileReadable[pindex->nFile] = BlockFileReadable(pindex->nFile);
-                    if (mapBlkDataFileReadable.find(pindex->nFile)->second && chainActive.Height() > AUTOPRUNE_AFTER_HEIGHT && LastBlockInFile(pindex->nFile) < nAutoPruneUpToHeight) { // Try to prune pruneable data
-                        if (RemoveBlockFile(pindex->nFile))
-                            mapBlkDataFileReadable[pindex->nFile] = false;
+                if (!mapDataFileReadable.count(pindex->nFile)) {
+                    mapDataFileReadable[pindex->nFile] = BlockFileReadable(pindex->nFile);
+                    if (mapDataFileReadable.find(pindex->nFile)->second && chainActive.Height() > AUTOPRUNE_AFTER_HEIGHT && LastBlockInFile(pindex->nFile) < nKeepMinBlksFromHeight) { // Try to prune pruneable data if disk space is below user request
+                        setDataFilePrunable.insert(pindex->nFile);
                     }
                 }
             }
             if (pindex->nStatus & BLOCK_HAVE_UNDO) {
-                if (!mapBlkUndoFileReadable.count(pindex->nFile)) {
-                    mapBlkUndoFileReadable[pindex->nFile] = UndoFileReadable(pindex->nFile);
-                    if (mapBlkUndoFileReadable.find(pindex->nFile)->second && chainActive.Height() > AUTOPRUNE_AFTER_HEIGHT && LastBlockInFile(pindex->nFile) < nAutoPruneUpToHeight) { // Try to prune pruneable data
-                        if (RemoveUndoFile(pindex->nFile))
-                            mapBlkUndoFileReadable[pindex->nFile] = false;
+                if (!mapUndoFileReadable.count(pindex->nFile)) {
+                    mapUndoFileReadable[pindex->nFile] = UndoFileReadable(pindex->nFile);
+                    if (mapUndoFileReadable.find(pindex->nFile)->second && chainActive.Height() > AUTOPRUNE_AFTER_HEIGHT && LastBlockInFile(pindex->nFile) < nKeepMinBlksFromHeight) { // Try to prune pruneable data
+                        setUndoFilePrunable.insert(pindex->nFile);
                     }
                 }
             }
         }
         bool fWrite = false;
-        if (mapBlkDataFileReadable.count(pindex->nFile) && !mapBlkDataFileReadable.find(pindex->nFile)->second) {
+        if (mapDataFileReadable.count(pindex->nFile) && !mapDataFileReadable.find(pindex->nFile)->second) {
             pindex->nStatus &= ~BLOCK_HAVE_DATA;
             fWrite = true;
         }
-        if (mapBlkUndoFileReadable.count(pindex->nFile) && !mapBlkUndoFileReadable.find(pindex->nFile)->second) {
+        if (mapUndoFileReadable.count(pindex->nFile) && !mapUndoFileReadable.find(pindex->nFile)->second) {
             pindex->nStatus &= ~BLOCK_HAVE_UNDO;
             fWrite = true;
         }
@@ -3020,14 +3013,14 @@ bool CheckAndPruneBlockFiles()
                 return false;
         }
         if (~pindex->nStatus & BLOCK_HAVE_DATA && pindex->nStatus & BLOCK_VALID_CHAIN)
-            setBlockDataPruned.insert(pindex->nHeight);
+            setDataPruned.insert(pindex->nHeight);
         if (~pindex->nStatus & BLOCK_HAVE_UNDO && pindex->nStatus & BLOCK_VALID_CHAIN)
-            setBlockUndoPruned.insert(pindex->nHeight);
+            setUndoPruned.insert(pindex->nHeight);
     }
-    if (!setBlockDataPruned.empty())
-        LogPrintf("Data for blocks from %i to %i has been pruned\n", *setBlockDataPruned.begin(), *setBlockDataPruned.end());
-    if (!setBlockUndoPruned.empty())
-        LogPrintf("Undo data for blocks from %i to %i has been pruned\n", *setBlockUndoPruned.begin(), *setBlockUndoPruned.end());
+    if (!setDataPruned.empty())
+        LogPrintf("Data for blocks from %i to %i has been pruned\n", *setDataPruned.begin(), *setDataPruned.rbegin());
+    if (!setUndoPruned.empty())
+        LogPrintf("Undo data for blocks from %i to %i has been pruned\n", *setUndoPruned.begin(), *setUndoPruned.rbegin());
     return true;
 }
 
