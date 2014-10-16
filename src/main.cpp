@@ -2874,20 +2874,18 @@ bool CheckBlockFiles()
     // Check presence of blk files
     LogPrintf("Checking all blk files are present...\n");
     set<int> setRequiredDataFilesReadable;
-    BOOST_FOREACH(const PAIRTYPE(uint256, CBlockIndex*)& item, mapBlockIndex)
-    {
-        CBlockIndex* pindex = item.second;
+    for (CBlockIndex* pindex = chainActive.Tip(); pindex && pindex->pprev; pindex = pindex->pprev) {
         if (pindex->nStatus & BLOCK_HAVE_DATA && pindex->nStatus & BLOCK_HAVE_UNDO) {
-            setRequiredDataFilesReadable.insert(pindex->nFile);
+            if (!setRequiredDataFilesReadable.count(pindex->nFile)) {
+                if (DataFilesReadable(pindex->nFile))
+                    setRequiredDataFilesReadable.insert(pindex->nFile);
+                else {
+                    LogPrintf("Error: Required file for block: %i is unreadable\n", pindex->nHeight);
+                    return false;
+                }
+            }
         } else {
             LogPrintf("Error: Missing data for required block: %i\n", pindex->nHeight);
-            return false;
-        }
-    }
-    for (std::set<int>::iterator it = setRequiredDataFilesReadable.begin(); it != setRequiredDataFilesReadable.end(); it++)
-    {
-        if (!DataFilesReadable(*it)) {
-            LogPrintf("Error: Required file: %i is unreadable\n", *it);
             return false;
         }
     }
