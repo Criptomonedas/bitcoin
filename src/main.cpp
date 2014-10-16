@@ -2850,6 +2850,12 @@ bool static LoadBlockIndexDB()
     return true;
 }
 
+bool BlockFileIsReadable(int nFile)
+{
+    CDiskBlockPos pos(nFile, 0);
+    return !CAutoFile(OpenBlockFile(pos, true), SER_DISK, CLIENT_VERSION).IsNull();
+}
+
 bool CheckBlockFiles()
 {
     // Check presence of blk files
@@ -2864,8 +2870,7 @@ bool CheckBlockFiles()
     }
     for (std::set<int>::iterator it = setBlkDataFiles.begin(); it != setBlkDataFiles.end(); it++)
     {
-        CDiskBlockPos pos(*it, 0);
-        if (!CAutoFile(OpenBlockFile(pos, true), SER_DISK, CLIENT_VERSION)) {
+        if (!BlockFileIsReadable(*it)) {
             return false;
         }
     }
