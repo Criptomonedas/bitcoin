@@ -2860,21 +2860,38 @@ bool BlockFileIsReadable(int nFile)
     return !CAutoFile(OpenBlockFile(pos, true), SER_DISK, CLIENT_VERSION).IsNull();
 }
 
+bool UndoFileIsReadable(int nFile)
+{
+    CDiskBlockPos pos(nFile, 0);
+    return !CAutoFile(OpenUndoFile(pos, true), SER_DISK, CLIENT_VERSION).IsNull();
+}
+
+bool DataFilesReadable(int nFile)
+{
+    if (BlockFileIsReadable(nFile) && UndoFileIsReadable(nFile))
+        return true;
+    return false;
+}
+
 bool CheckBlockFiles()
 {
     // Check presence of blk files
     LogPrintf("Checking all blk files are present...\n");
-    set<int> setBlkDataFiles;
+    set<int> setRequiredDataFilesReadable;
     BOOST_FOREACH(const PAIRTYPE(uint256, CBlockIndex*)& item, mapBlockIndex)
     {
         CBlockIndex* pindex = item.second;
-        if (pindex->nStatus & BLOCK_HAVE_DATA) {
-            setBlkDataFiles.insert(pindex->nFile);
+        if (pindex->nStatus & BLOCK_HAVE_DATA && pindex->nStatus & BLOCK_HAVE_UNDO) {
+            setRequiredDataFilesReadable.insert(pindex->nFile);
+        } else {
+            LogPrintf("Error: Missing data for required block: %i\n", pindex->nHeight);
+            return false;
         }
     }
-    for (std::set<int>::iterator it = setBlkDataFiles.begin(); it != setBlkDataFiles.end(); it++)
+    for (std::set<int>::iterator it = setRequiredDataFilesReadable.begin(); it != setRequiredDataFilesReadable.end(); it++)
     {
-        if (!BlockFileIsReadable(*it)) {
+        if (!DataFilesReadable(*it)) {
+            LogPrintf("Error: Required file: %i is unreadable\n", *it);
             return false;
         }
     }
