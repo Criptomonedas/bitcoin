@@ -2735,11 +2735,27 @@ bool AbortNode(const std::string &strMessage, const std::string &userMessage) {
 
 uintmax_t BlockFilesSize()
 {
-    uintmax_t size = 0;
+    uintmax_t size = 0, sizeOnDisk = 0, sizeOnMem=0;
     for (boost::filesystem::directory_iterator it = boost::filesystem::directory_iterator(GetDataDir() / "blocks") ; it != boost::filesystem::directory_iterator() ; it++) {
         if (boost::filesystem::exists(it->path()) && !boost::filesystem::is_directory(it->path()))
-            size += boost::filesystem::file_size(it->path());
+            sizeOnDisk += boost::filesystem::file_size(it->path());
     }
+    BOOST_FOREACH(CBlockFileInfo file, vinfoBlockFile)
+        sizeOnMem += file.nSize + file.nUndoSize;
+    if (sizeOnMem != sizeOnDisk) {
+        if (!sizeOnMem)
+            size = sizeOnDisk;
+        else if (!sizeOnDisk)
+            size = sizeOnMem;
+        else {
+            uintmax_t sizeMax=max(sizeOnMem, sizeOnDisk), sizeMin=min(sizeOnMem, sizeOnDisk);
+            float ratio=(float)(sizeMax - sizeMin) / (float)sizeMax;
+            if (ratio > 0.05)
+                LogPrintf("Warning: The difference between the size measured on disk and on memory is greater than 5 percent. There might be some stale files or some other inconsistency. Size on disk: %u. Size on memory: %u. Ratio: %f.\n", sizeOnDisk, sizeOnMem, ratio);
+            size=sizeMin; // This is the conservative approach, not to risk pruning too much.
+        }
+    } else
+        size=sizeOnMem;
     return size;
 }
 
