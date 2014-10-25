@@ -2697,6 +2697,20 @@ bool RemoveDiskFile(int nFile, const char* prefix)
     CDiskBlockPos pos(nFile, 0);
     if (boost::filesystem::remove(GetBlockPosFilename(pos, prefix))) {
         LogPrintf("File %s removed\n", GetBlockPosFilename(pos, prefix));
+        if (!strcmp(prefix, "blk")) {
+            if (vinfoBlockFile[nFile].nUndoSize)
+                vinfoBlockFile[nFile].nSize = 0;
+            else
+                vinfoBlockFile[nFile].SetNull();
+        }
+        if (!strcmp(prefix, "rev")) {
+            if (vinfoBlockFile[nFile].nSize)
+                vinfoBlockFile[nFile].nUndoSize = 0;
+            else
+                vinfoBlockFile[nFile].SetNull();
+        }
+        if (!pblocktree->WriteBlockFileInfo(nFile, vinfoBlockFile[nFile]))
+            LogPrintf("Error Writing Block Info\n");
         return true;
     }
     LogPrintf("Error removing file %s\n", GetBlockPosFilename(pos, prefix));
