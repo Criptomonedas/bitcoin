@@ -2935,12 +2935,16 @@ bool static LoadBlockIndexDB()
 bool BlockFileIsReadable(int nFile)
 {
     CDiskBlockPos pos(nFile, 0);
+    if (!vinfoBlockFile[nFile].nSize && !boost::filesystem::exists(GetBlockPosFilename(pos, "blk")))
+        return false;
     return !CAutoFile(OpenBlockFile(pos, true), SER_DISK, CLIENT_VERSION).IsNull();
 }
 
 bool UndoFileIsReadable(int nFile)
 {
     CDiskBlockPos pos(nFile, 0);
+    if (!vinfoBlockFile[nFile].nUndoSize && !boost::filesystem::exists(GetBlockPosFilename(pos, "rev")))
+        return false;
     return !CAutoFile(OpenUndoFile(pos, true), SER_DISK, CLIENT_VERSION).IsNull();
 }
 
