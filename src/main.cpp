@@ -2690,6 +2690,10 @@ uint256 CPartialMerkleTree::ExtractMatches(std::vector<uint256> &vMatch) {
 
 bool RemoveDiskFile(int nFile, const char* prefix)
 {
+    if (strcmp(prefix, "blk") && strcmp(prefix, "rev")) {
+        LogPrintf("Unknown prefix:%s\n", prefix);
+        return false;
+    }
     CDiskBlockPos pos(nFile, 0);
     if (boost::filesystem::remove(GetBlockPosFilename(pos, prefix))) {
         LogPrintf("File %s removed\n", GetBlockPosFilename(pos, prefix));
