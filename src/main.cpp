@@ -2768,7 +2768,7 @@ uintmax_t BlockFilesSize()
         else {
             uintmax_t sizeMax=max(sizeOnMem, sizeOnDisk), sizeMin=min(sizeOnMem, sizeOnDisk);
             float ratio=(float)(sizeMax - sizeMin) / (float)sizeMax;
-            if (ratio > 0.05)
+            if (ratio > 0.05 && !fReindex && !fImporting && !IsInitialBlockDownload())
                 LogPrintf("Warning: The difference between the size measured on disk and on memory is greater than 5 percent. There might be some stale files or some other inconsistency. Size on disk: %u. Size on memory: %u. Ratio: %f.\n", sizeOnDisk, sizeOnMem, ratio);
             size=sizeMin; // This is the conservative approach, not to risk pruning too much.
         }
