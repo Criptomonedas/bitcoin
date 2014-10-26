@@ -614,7 +614,7 @@ bool AppInit2(boost::thread_group& threadGroup)
     if (nFD - MIN_CORE_FILEDESCRIPTORS < nMaxConnections)
         nMaxConnections = nFD - MIN_CORE_FILEDESCRIPTORS;
 
-    if (GetArg("-prune", 0)) {
+    if (GetArg("-prune", 300)) {
         if (GetBoolArg("-txindex", false))
             return InitError(_("Prune mode is incompatible with -txindex."));
 #ifdef ENABLE_WALLET
@@ -662,7 +662,7 @@ bool AppInit2(boost::thread_group& threadGroup)
         nScriptCheckThreads = MAX_SCRIPTCHECK_THREADS;
 
     fServer = GetBoolArg("-server", false);
-    nPrune = GetArg("-prune", 0) * 1024 * 1024;
+    nPrune = GetArg("-prune", 300) * 1024 * 1024;
     if (nPrune) {
         if (nPrune >= MIN_BLOCK_FILES_SIZE)
             LogPrintf("Autoprune configured to use less than %uMiB on disk for block files.\n", nPrune / 1024 / 1024);
