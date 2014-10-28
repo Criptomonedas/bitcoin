@@ -2709,6 +2709,7 @@ bool RemoveDiskFile(int nFile, const char* prefix)
             else
                 vinfoBlockFile[nFile].SetNull();
         }
+        LOCK(cs_main);
         if (!pblocktree->WriteBlockFileInfo(nFile, vinfoBlockFile[nFile]))
             LogPrintf("Error Writing Block Info\n");
         return true;
@@ -2970,6 +2971,7 @@ bool CheckBlockFiles()
     set<int> setRequiredDataFilesReadable, setDataPruned, setUndoPruned;
     setDataFilePrunable.clear();
     setUndoFilePrunable.clear();
+    LOCK(cs_main);
     for (CBlockIndex* pindex = chainActive.Tip(); pindex && pindex->pprev; pindex = pindex->pprev) {
         if (pindex->nHeight > nKeepMinBlksFromHeight) {
             if (!(pindex->nStatus & BLOCK_HAVE_DATA) || !(pindex->nStatus & BLOCK_HAVE_UNDO)) { // Fail immediately if required data is missing
