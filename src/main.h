@@ -94,6 +94,12 @@ static const unsigned int MAX_HEADERS_RESULTS = 2000;
  *  degree of disordering of blocks on disk (which make reindexing and in the future perhaps pruning
  *  harder). We'll probably want to make this a per-peer adaptive value at some point. */
 static const unsigned int BLOCK_DOWNLOAD_WINDOW = 1024;
+/** Minimum amount of blocks to keep unpruned, needed to afford deep reorganizations. */
+static const unsigned int MIN_BLOCKS_TO_KEEP = 288;
+/** Start autopruning after this height. */
+static const signed int AUTOPRUNE_AFTER_HEIGHT = 100000;
+/** Minimum amount of bytes needed for block files. */
+static const unsigned int MIN_BLOCK_FILES_SIZE = 300 * 1024 * 1024;
 
 /** "reject" message codes **/
 static const unsigned char REJECT_MALFORMED = 0x01;
@@ -128,6 +134,7 @@ extern bool fTxIndex;
 extern bool fIsBareMultisigStd;
 extern unsigned int nCoinCacheSize;
 extern CFeeRate minRelayTxFee;
+extern uintmax_t nPrune;
 
 // Best header we've seen so far (used for getheaders queries' starting points).
 extern CBlockIndex *pindexBestHeader;
@@ -173,6 +180,8 @@ bool LoadExternalBlockFile(FILE* fileIn, CDiskBlockPos *dbp = NULL);
 bool InitBlockIndex();
 /** Load the block tree and coins database from disk */
 bool LoadBlockIndex();
+/** Check all required block files are present */
+bool CheckBlockFiles();
 /** Unload database information */
 void UnloadBlockIndex();
 /** Print the loaded block tree */
