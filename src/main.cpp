@@ -2964,6 +2964,7 @@ int LastBlockInFile(int nFile)
 
 bool CheckBlockFiles()
 {
+    LOCK(cs_main);
     // Check presence of blk files
     int nKeepMinBlksFromHeight = nPrune ? (max((int)(chainActive.Height() - MIN_BLOCKS_TO_KEEP), 0)) : 0;
     LogPrintf("Checking all required data for active chain is available (mandatory from height %i to %i)\n", nKeepMinBlksFromHeight, max(chainActive.Height(), 0));
@@ -2971,7 +2972,6 @@ bool CheckBlockFiles()
     set<int> setRequiredDataFilesReadable, setDataPruned, setUndoPruned;
     setDataFilePrunable.clear();
     setUndoFilePrunable.clear();
-    LOCK(cs_main);
     for (CBlockIndex* pindex = chainActive.Tip(); pindex && pindex->pprev; pindex = pindex->pprev) {
         if (pindex->nHeight > nKeepMinBlksFromHeight) {
             if (!(pindex->nStatus & BLOCK_HAVE_DATA) || !(pindex->nStatus & BLOCK_HAVE_UNDO)) { // Fail immediately if required data is missing
