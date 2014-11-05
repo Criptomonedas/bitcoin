@@ -664,11 +664,11 @@ bool AppInit2(boost::thread_group& threadGroup)
     fServer = GetBoolArg("-server", false);
     nPrune = GetArg("-prune", 0) * 1024 * 1024;
     if (nPrune) {
-        if (nPrune < filesystem::space(GetDataDir()).capacity && nPrune >= MIN_BLOCK_FILES_SIZE)
-            LogPrintf("Autoprune configured to use less than %uMiB on disk for block files. Capacity: %uMiB\n", nPrune / 1024 / 1024, filesystem::space(GetDataDir()).capacity / 1024 / 1024);
+        if (nPrune >= MIN_BLOCK_FILES_SIZE)
+            LogPrintf("Autoprune configured to use less than %uMiB on disk for block files.\n", nPrune / 1024 / 1024);
         else {
-            LogPrintf("Autoprune value out of range: Disabling\n");
-            nPrune = 0;
+            nPrune = ~0;
+            LogPrintf("Autoprune configured below the %uMiB minimum. Setting at %uMiB maximum to be sure not to prune too much. Please, check your configuration.\n", MIN_BLOCK_FILES_SIZE / 1024 / 1024, nPrune / 1024 / 1024);
         }
     }
 #ifdef ENABLE_WALLET
