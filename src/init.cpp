@@ -244,7 +244,7 @@ std::string HelpMessage(HelpMessageMode mode)
     strUsage += "  -prune=<n>             " + _("Reduce storage requirements by pruning (deleting) old blocks. This mode disables wallet support and is incompatible with -txindex.") + "\n";
     strUsage += "                         " + _("Warning: Reverting this setting requires re-downloading the entire blockchain!") + "\n";
     strUsage += "                         " + _("(default: 0 = disable pruning blocks,") + "\n";
-    strUsage += "                         " + strprintf(_(">%u = max size in MB to use for block files"), MIN_BLOCK_FILES_SIZE / 1024 / 1024) + "\n";
+    strUsage += "                         " + strprintf(_(">%u = max size in MiB to use for block files"), MIN_BLOCK_FILES_SIZE / 1024 / 1024) + "\n";
     strUsage += "  -reindex               " + _("Rebuild block chain index from current blk000??.dat files") + " " + _("on startup") + "\n";
 #if !defined(WIN32)
     strUsage += "  -sysperms              " + _("Create new files with system default permissions, instead of umask 077 (only effective with disabled wallet functionality)") + "\n";
@@ -665,7 +665,7 @@ bool AppInit2(boost::thread_group& threadGroup)
     nPrune = GetArg("-prune", 0) * 1024 * 1024;
     if (nPrune) {
         if (nPrune < filesystem::space(GetDataDir()).capacity && nPrune >= MIN_BLOCK_FILES_SIZE)
-            LogPrintf("Autoprune configured to use less than %uMB on disk for block files. Capacity: %uMB\n", nPrune / 1024 / 1024, filesystem::space(GetDataDir()).capacity / 1024 / 1024);
+            LogPrintf("Autoprune configured to use less than %uMiB on disk for block files. Capacity: %uMiB\n", nPrune / 1024 / 1024, filesystem::space(GetDataDir()).capacity / 1024 / 1024);
         else {
             LogPrintf("Autoprune value out of range: Disabling\n");
             nPrune = 0;
