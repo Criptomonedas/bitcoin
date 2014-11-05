@@ -2933,7 +2933,7 @@ bool static LoadBlockIndexDB()
     return true;
 }
 
-bool BlockFileIsReadable(int nFile)
+bool BlockFileIsOpenable(int nFile)
 {
     CDiskBlockPos pos(nFile, 0);
     if (!vinfoBlockFile[nFile].nSize && !boost::filesystem::exists(GetBlockPosFilename(pos, "blk")))
@@ -2941,7 +2941,7 @@ bool BlockFileIsReadable(int nFile)
     return !CAutoFile(OpenBlockFile(pos, true), SER_DISK, CLIENT_VERSION).IsNull();
 }
 
-bool UndoFileIsReadable(int nFile)
+bool UndoFileIsOpenable(int nFile)
 {
     CDiskBlockPos pos(nFile, 0);
     if (!vinfoBlockFile[nFile].nUndoSize && !boost::filesystem::exists(GetBlockPosFilename(pos, "rev")))
@@ -2949,9 +2949,9 @@ bool UndoFileIsReadable(int nFile)
     return !CAutoFile(OpenUndoFile(pos, true), SER_DISK, CLIENT_VERSION).IsNull();
 }
 
-bool DataFilesReadable(int nFile)
+bool DataFilesOpenable(int nFile)
 {
-    if (BlockFileIsReadable(nFile) && UndoFileIsReadable(nFile))
+    if (BlockFileIsOpenable(nFile) && UndoFileIsOpenable(nFile))
         return true;
     return false;
 }
@@ -2968,8 +2968,8 @@ bool CheckBlockFiles()
     // Check presence of blk files
     int nKeepMinBlksFromHeight = nPrune ? (max((int)(chainActive.Height() - MIN_BLOCKS_TO_KEEP), 0)) : 0;
     LogPrintf("Checking all required data for active chain is available (mandatory from height %i to %i)\n", nKeepMinBlksFromHeight, max(chainActive.Height(), 0));
-    map<int, bool> mapDataFileReadable, mapUndoFileReadable;
-    set<int> setRequiredDataFilesReadable, setDataPruned, setUndoPruned;
+    map<int, bool> mapDataFileOpenable, mapUndoFileOpenable;
+    set<int> setRequiredDataFilesOpenable, setDataPruned, setUndoPruned;
     setDataFilePrunable.clear();
     setUndoFilePrunable.clear();
     for (CBlockIndex* pindex = chainActive.Tip(); pindex && pindex->pprev; pindex = pindex->pprev) {
@@ -2977,37 +2977,37 @@ bool CheckBlockFiles()
             if (!(pindex->nStatus & BLOCK_HAVE_DATA) || !(pindex->nStatus & BLOCK_HAVE_UNDO)) { // Fail immediately if required data is missing
                 LogPrintf("Error: Missing data for required block: %i\n", pindex->nHeight);
                 return false;
-            } else if (!setRequiredDataFilesReadable.count(pindex->nFile)) {
-                if (!DataFilesReadable(pindex->nFile)) { // Or if data is unreadable
+            } else if (!setRequiredDataFilesOpenable.count(pindex->nFile)) {
+                if (!DataFilesOpenable(pindex->nFile)) { // Or if data is unreadable
                     LogPrintf("Error: Required file for block: %i is unreadable\n", pindex->nHeight);
                     return false;
                 } else
-                    setRequiredDataFilesReadable.insert(pindex->nFile);
+                    setRequiredDataFilesOpenable.insert(pindex->nFile);
             }
         } else { // Check consistency and pruneability of unrequired data
             if (pindex->nStatus & BLOCK_HAVE_DATA) {
-                if (!mapDataFileReadable.count(pindex->nFile)) {
-                    mapDataFileReadable[pindex->nFile] = BlockFileIsReadable(pindex->nFile);
-                    if (mapDataFileReadable[pindex->nFile] && chainActive.Height() > AUTOPRUNE_AFTER_HEIGHT && LastBlockInFile(pindex->nFile) < nKeepMinBlksFromHeight) { // Mark pruneable data
+                if (!mapDataFileOpenable.count(pindex->nFile)) {
+                    mapDataFileOpenable[pindex->nFile] = BlockFileIsOpenable(pindex->nFile);
+                    if (mapDataFileOpenable[pindex->nFile] && chainActive.Height() > AUTOPRUNE_AFTER_HEIGHT && LastBlockInFile(pindex->nFile) < nKeepMinBlksFromHeight) { // Mark pruneable data
                         setDataFilePrunable.insert(pindex->nFile);
                     }
                 }
             }
             if (pindex->nStatus & BLOCK_HAVE_UNDO) {
-                if (!mapUndoFileReadable.count(pindex->nFile)) {
-                    mapUndoFileReadable[pindex->nFile] = UndoFileIsReadable(pindex->nFile);
-                    if (mapUndoFileReadable[pindex->nFile] && chainActive.Height() > AUTOPRUNE_AFTER_HEIGHT && LastBlockInFile(pindex->nFile) < nKeepMinBlksFromHeight) { // Mark pruneable data
+                if (!mapUndoFileOpenable.count(pindex->nFile)) {
+                    mapUndoFileOpenable[pindex->nFile] = UndoFileIsOpenable(pindex->nFile);
+                    if (mapUndoFileOpenable[pindex->nFile] && chainActive.Height() > AUTOPRUNE_AFTER_HEIGHT && LastBlockInFile(pindex->nFile) < nKeepMinBlksFromHeight) { // Mark pruneable data
                         setUndoFilePrunable.insert(pindex->nFile);
                     }
                 }
             }
         }
         bool fWrite = false;
-        if (mapDataFileReadable.count(pindex->nFile) && !mapDataFileReadable[pindex->nFile]) {
+        if (mapDataFileOpenable.count(pindex->nFile) && !mapDataFileOpenable[pindex->nFile]) {
             pindex->nStatus &= ~BLOCK_HAVE_DATA;
             fWrite = true;
         }
-        if (mapUndoFileReadable.count(pindex->nFile) && !mapUndoFileReadable[pindex->nFile]) {
+        if (mapUndoFileOpenable.count(pindex->nFile) && !mapUndoFileOpenable[pindex->nFile]) {
             pindex->nStatus &= ~BLOCK_HAVE_UNDO;
             fWrite = true;
         }
