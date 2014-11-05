@@ -2688,13 +2688,10 @@ uint256 CPartialMerkleTree::ExtractMatches(std::vector<uint256> &vMatch) {
     return hashMerkleRoot;
 }
 
-bool RemoveDiskFile(int nFile, const char* prefix)
+bool RemoveDiskFile(int nFile, bool blockorundo)
 {
-    if (strcmp(prefix, "blk") && strcmp(prefix, "rev")) {
-        LogPrintf("Unknown prefix:%s\n", prefix);
-        return false;
-    }
     CDiskBlockPos pos(nFile, 0);
+    const char* prefix = blockorundo ? "rev" : "blk";
     if (boost::filesystem::remove(GetBlockPosFilename(pos, prefix))) {
         LogPrintf("File %s removed\n", GetBlockPosFilename(pos, prefix));
         if (!strcmp(prefix, "blk")) {
@@ -2720,12 +2717,12 @@ bool RemoveDiskFile(int nFile, const char* prefix)
 
 bool RemoveBlockFile(int nFile)
 {
-    return RemoveDiskFile(nFile, "blk");
+    return RemoveDiskFile(nFile, 0);
 }
 
 bool RemoveUndoFile(int nFile)
 {
-    return RemoveDiskFile(nFile, "rev");
+    return RemoveDiskFile(nFile, 1);
 }
 
 
