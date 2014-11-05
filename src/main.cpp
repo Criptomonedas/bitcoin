@@ -2988,7 +2988,7 @@ bool CheckBlockFiles()
             if (pindex->nStatus & BLOCK_HAVE_DATA) {
                 if (!mapDataFileReadable.count(pindex->nFile)) {
                     mapDataFileReadable[pindex->nFile] = BlockFileIsReadable(pindex->nFile);
-                    if (mapDataFileReadable.find(pindex->nFile)->second && chainActive.Height() > AUTOPRUNE_AFTER_HEIGHT && LastBlockInFile(pindex->nFile) < nKeepMinBlksFromHeight) { // Mark pruneable data
+                    if (mapDataFileReadable[pindex->nFile] && chainActive.Height() > AUTOPRUNE_AFTER_HEIGHT && LastBlockInFile(pindex->nFile) < nKeepMinBlksFromHeight) { // Mark pruneable data
                         setDataFilePrunable.insert(pindex->nFile);
                     }
                 }
@@ -2996,18 +2996,18 @@ bool CheckBlockFiles()
             if (pindex->nStatus & BLOCK_HAVE_UNDO) {
                 if (!mapUndoFileReadable.count(pindex->nFile)) {
                     mapUndoFileReadable[pindex->nFile] = UndoFileIsReadable(pindex->nFile);
-                    if (mapUndoFileReadable.find(pindex->nFile)->second && chainActive.Height() > AUTOPRUNE_AFTER_HEIGHT && LastBlockInFile(pindex->nFile) < nKeepMinBlksFromHeight) { // Mark pruneable data
+                    if (mapUndoFileReadable[pindex->nFile] && chainActive.Height() > AUTOPRUNE_AFTER_HEIGHT && LastBlockInFile(pindex->nFile) < nKeepMinBlksFromHeight) { // Mark pruneable data
                         setUndoFilePrunable.insert(pindex->nFile);
                     }
                 }
             }
         }
         bool fWrite = false;
-        if (mapDataFileReadable.count(pindex->nFile) && !mapDataFileReadable.find(pindex->nFile)->second) {
+        if (mapDataFileReadable.count(pindex->nFile) && !mapDataFileReadable[pindex->nFile]) {
             pindex->nStatus &= ~BLOCK_HAVE_DATA;
             fWrite = true;
         }
-        if (mapUndoFileReadable.count(pindex->nFile) && !mapUndoFileReadable.find(pindex->nFile)->second) {
+        if (mapUndoFileReadable.count(pindex->nFile) && !mapUndoFileReadable[pindex->nFile]) {
             pindex->nStatus &= ~BLOCK_HAVE_UNDO;
             fWrite = true;
         }
