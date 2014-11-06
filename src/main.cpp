@@ -1198,6 +1198,7 @@ CAmount GetBlockValue(int nHeight, const CAmount& nFees)
 bool IsInitialBlockDownload()
 {
     LOCK(cs_main);
+    static int counter;
     if (fImporting || fReindex || chainActive.Height() < Checkpoints::GetTotalBlocksEstimate())
         return true;
     static bool lockibdstate;
@@ -1205,8 +1206,13 @@ bool IsInitialBlockDownload()
         return false;
     bool state = (chainActive.Height() < pindexBestHeader->nHeight - 24 * 6 ||
             pindexBestHeader->GetBlockTime() < GetTime() - 24 * 60 * 60);
-    if (!state)
+    if (!(bool)remainder(counter, 50))
+        LogPrintf("%s state: %b. counter: %i.\n", __func__, state, counter);
+    counter++;
+    if (!state) {
+        LogPrintf("%s: State false locked\n", __func__);
         lockibdstate = true;
+    }
     return state;
 }
 
