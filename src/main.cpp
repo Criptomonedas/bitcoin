@@ -1201,18 +1201,19 @@ bool IsInitialBlockDownload()
     static int counter;
     if (fImporting || fReindex || chainActive.Height() < Checkpoints::GetTotalBlocksEstimate())
         return true;
-    static bool lockIBDState = false;
+    static bool prevstate = false, lockIBDState = false;
     if (lockIBDState)
         return false;
     bool state = (chainActive.Height() < pindexBestHeader->nHeight - 24 * 6 ||
             pindexBestHeader->GetBlockTime() < GetTime() - 24 * 60 * 60);
-    if (!(bool)remainder(counter, 50))
+    if (!(bool)remainder(counter, 50) || prevstate != state)
         LogPrintf("%s state: %b. counter: %i.\n", __func__, state, counter);
     counter++;
     if (!state) {
         LogPrintf("%s: State false locked\n", __func__);
         lockIBDState = true;
     }
+    prevstate = state;
     return state;
 }
 
