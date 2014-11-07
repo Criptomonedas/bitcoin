@@ -1201,8 +1201,8 @@ bool IsInitialBlockDownload()
     static int counter;
     if (fImporting || fReindex || chainActive.Height() < Checkpoints::GetTotalBlocksEstimate())
         return true;
-    static bool lockibdstate;
-    if (lockibdstate)
+    static bool lockIBDState = false;
+    if (lockIBDState)
         return false;
     bool state = (chainActive.Height() < pindexBestHeader->nHeight - 24 * 6 ||
             pindexBestHeader->GetBlockTime() < GetTime() - 24 * 60 * 60);
@@ -1211,7 +1211,7 @@ bool IsInitialBlockDownload()
     counter++;
     if (!state) {
         LogPrintf("%s: State false locked\n", __func__);
-        lockibdstate = true;
+        lockIBDState = true;
     }
     return state;
 }
