@@ -670,7 +670,7 @@ bool AppInit2(boost::thread_group& threadGroup)
             LogPrintf("Autoprune configured to use less than %uMiB on disk for block files.\n", nPrune / 1024 / 1024);
         else {
             nPrune = ~0;
-            LogPrintf("Autoprune configured below the %uMiB minimum. Setting at the maximum admisible of %uMiB, to be sure not to prune too much. Please, check your configuration.\n", MIN_BLOCK_FILES_SIZE / 1024 / 1024, nPrune / 1024 / 1024);
+            LogPrintf("Autoprune configured below the minimum of %uMiB. Setting at the maximum possible of %uMiB, to avoid pruning too much. Please, check your configuration.\n", MIN_BLOCK_FILES_SIZE / 1024 / 1024, nPrune / 1024 / 1024);
         }
     }
 #ifdef ENABLE_WALLET

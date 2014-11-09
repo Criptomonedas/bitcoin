@@ -2717,27 +2717,26 @@ uint256 CPartialMerkleTree::ExtractMatches(std::vector<uint256> &vMatch) {
     return hashMerkleRoot;
 }
 
-bool RemoveDiskFile(int nFile, bool blockorundo)
+bool RemoveDiskFile(int nFile, bool blockOrUndo)
 {
+    LOCK(cs_main);
     CDiskBlockPos pos(nFile, 0);
-    const char* prefix = blockorundo ? "rev" : "blk";
+    const char* prefix = blockOrUndo ? "rev" : "blk";
     if (boost::filesystem::remove(GetBlockPosFilename(pos, prefix))) {
         LogPrintf("File %s removed\n", GetBlockPosFilename(pos, prefix));
-        if (!strcmp(prefix, "blk")) {
+        if (!blockOrUndo) {
             if (vinfoBlockFile[nFile].nUndoSize)
                 vinfoBlockFile[nFile].nSize = 0;
             else
                 vinfoBlockFile[nFile].SetNull();
-        }
-        if (!strcmp(prefix, "rev")) {
+        } else {
             if (vinfoBlockFile[nFile].nSize)
                 vinfoBlockFile[nFile].nUndoSize = 0;
             else
                 vinfoBlockFile[nFile].SetNull();
         }
-        LOCK(cs_main);
         if (!pblocktree->WriteBlockFileInfo(nFile, vinfoBlockFile[nFile]))
-            LogPrintf("Error Writing Block Info\n");
+            AbortNode("Error Writing Block Info\n");
         return true;
     }
     LogPrintf("Error removing file %s\n", GetBlockPosFilename(pos, prefix));
@@ -2753,7 +2752,6 @@ bool RemoveUndoFile(int nFile)
 {
     return RemoveDiskFile(nFile, 1);
 }
-
 
 
 bool PruneBlockFiles()
