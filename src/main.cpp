@@ -2758,7 +2758,7 @@ bool PruneBlockFiles()
 {
     if (!CheckBlockFiles())
         return false;
-    if (!setDataFilePrunable.empty() && RemoveBlockFile(*setDataFilePrunable.rbegin()))
+    if (!setDataFilePrunable.empty() && RemoveBlockFile(*setDataFilePrunable.begin()))
             return true;
     if (!setUndoFilePrunable.empty() && RemoveUndoFile(*setUndoFilePrunable.begin()))
             return true;
