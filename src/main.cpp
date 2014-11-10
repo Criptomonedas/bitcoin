@@ -2764,11 +2764,13 @@ bool PruneBlockFiles()
         return false;
     }
     int dataPrunable = *setDataFilePrunable.begin(), undoPrunable = *setUndoFilePrunable.begin();
-    if (dataPrunable < undoPrunable && RemoveBlockFile(dataPrunable))
-        return true;
-    if (undoPrunable < dataPrunable && RemoveUndoFile(undoPrunable))
-        return true;
-    if (RemoveBlockFile(dataPrunable) && RemoveUndoFile(undoPrunable))
+    if (dataPrunable < undoPrunable) {
+        if (RemoveBlockFile(dataPrunable))
+            return true;
+    } else if (undoPrunable < dataPrunable) {
+        if (RemoveUndoFile(undoPrunable))
+            return true;
+    } else if (RemoveBlockFile(dataPrunable) && RemoveUndoFile(undoPrunable))
         return true;
 
     return false;
