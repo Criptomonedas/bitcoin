@@ -2717,6 +2717,28 @@ uint256 CPartialMerkleTree::ExtractMatches(std::vector<uint256> &vMatch) {
     return hashMerkleRoot;
 }
 
+void ClearBlockFileInfo(int nFile)
+{
+    LOCK(cs_main);
+    if (vinfoBlockFile[nFile].nUndoSize)
+        vinfoBlockFile[nFile].nSize = 0;
+    else
+        vinfoBlockFile[nFile].SetNull();
+    if (!pblocktree->WriteBlockFileInfo(nFile, vinfoBlockFile[nFile]))
+        AbortNode("Error Writing Block Info\n");
+}
+
+void ClearUndoFileInfo(int nFile)
+{
+    LOCK(cs_main);
+    if (vinfoBlockFile[nFile].nSize)
+        vinfoBlockFile[nFile].nUndoSize = 0;
+    else
+        vinfoBlockFile[nFile].SetNull();
+    if (!pblocktree->WriteBlockFileInfo(nFile, vinfoBlockFile[nFile]))
+        AbortNode("Error Writing Block Info\n");
+}
+
 bool RemoveDiskFile(int nFile, bool blockOrUndo)
 {
     LOCK(cs_main);
@@ -2724,19 +2746,7 @@ bool RemoveDiskFile(int nFile, bool blockOrUndo)
     const char* prefix = blockOrUndo ? "rev" : "blk";
     if (boost::filesystem::remove(GetBlockPosFilename(pos, prefix))) {
         LogPrintf("File %s removed\n", GetBlockPosFilename(pos, prefix));
-        if (!blockOrUndo) {
-            if (vinfoBlockFile[nFile].nUndoSize)
-                vinfoBlockFile[nFile].nSize = 0;
-            else
-                vinfoBlockFile[nFile].SetNull();
-        } else {
-            if (vinfoBlockFile[nFile].nSize)
-                vinfoBlockFile[nFile].nUndoSize = 0;
-            else
-                vinfoBlockFile[nFile].SetNull();
-        }
-        if (!pblocktree->WriteBlockFileInfo(nFile, vinfoBlockFile[nFile]))
-            AbortNode("Error Writing Block Info\n");
+        blockOrUndo ? ClearUndoFileInfo(nFile) : ClearBlockFileInfo(nFile);
         return true;
     }
     LogPrintf("Error removing file %s\n", GetBlockPosFilename(pos, prefix));
@@ -2762,7 +2772,7 @@ bool PruneBlockFiles()
         LogPrintf("There's nothing to prune.\n");
         return false;
     }
-    bool fTrue =false;
+    bool fTrue = false;
     int dataPrunable = *setDataFilePrunable.begin(), undoPrunable = *setUndoFilePrunable.begin();
     if (dataPrunable < undoPrunable) {
         if (RemoveBlockFile(dataPrunable))
