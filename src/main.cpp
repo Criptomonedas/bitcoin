@@ -2757,16 +2757,18 @@ bool PruneBlockFiles()
         LogPrintf("There's nothing to prune.\n");
         return false;
     }
+    bool fFileRemoved = false;
     int dataPrunable = *setDataFilePrunable.begin(), undoPrunable = *setUndoFilePrunable.begin();
     if (dataPrunable < undoPrunable) {
-        if (RemoveBlockFile(dataPrunable))
-            return true;
+        fFileRemoved = RemoveBlockFile(dataPrunable);
     } else if (undoPrunable < dataPrunable) {
-        if (RemoveUndoFile(undoPrunable))
-            return true;
-    } else if (RemoveBlockFile(dataPrunable) && RemoveUndoFile(undoPrunable))
+        fFileRemoved = RemoveUndoFile(undoPrunable);
+    } else
+        fFileRemoved = (RemoveBlockFile(dataPrunable) | RemoveUndoFile(undoPrunable));
+    if (fFileRemoved) {
+        CheckBlockFiles();
         return true;
-
+    }
     return false;
 }
 
