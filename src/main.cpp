@@ -2737,6 +2737,7 @@ bool RemoveDiskFile(int nFile, bool blockOrUndo)
         }
         if (!pblocktree->WriteBlockFileInfo(nFile, vinfoBlockFile[nFile]))
             AbortNode("Error Writing Block Info\n");
+        CheckBlockFiles();
         return true;
     }
     LogPrintf("Error removing file %s\n", GetBlockPosFilename(pos, prefix));
