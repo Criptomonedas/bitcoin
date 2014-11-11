@@ -2962,7 +2962,11 @@ bool BlockFileIsOpenable(int nFile)
     CDiskBlockPos pos(nFile, 0);
     if (!vinfoBlockFile[nFile].nSize && !boost::filesystem::exists(GetBlockPosFilename(pos, "blk")))
         return false;
-    return !CAutoFile(OpenBlockFile(pos, true), SER_DISK, CLIENT_VERSION).IsNull();
+    if (CAutoFile(OpenBlockFile(pos, true), SER_DISK, CLIENT_VERSION).IsNull()) {
+        ClearBlockFileInfo(nFile);
+        return false;
+    }
+    return true;
 }
 
 bool UndoFileIsOpenable(int nFile)
@@ -2970,7 +2974,11 @@ bool UndoFileIsOpenable(int nFile)
     CDiskBlockPos pos(nFile, 0);
     if (!vinfoBlockFile[nFile].nUndoSize && !boost::filesystem::exists(GetBlockPosFilename(pos, "rev")))
         return false;
-    return !CAutoFile(OpenUndoFile(pos, true), SER_DISK, CLIENT_VERSION).IsNull();
+    if (CAutoFile(OpenUndoFile(pos, true), SER_DISK, CLIENT_VERSION).IsNull()) {
+        ClearUndoFileInfo(nFile);
+        return false;
+    }
+    return true;
 }
 
 bool DataFilesAreOpenable(int nFile)
