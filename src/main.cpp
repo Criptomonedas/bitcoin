@@ -2811,8 +2811,10 @@ bool CheckDiskSpace(uint64_t nAdditionalBytes)
 {
     if (nPrune) {
         while (BlockFilesSize() + nAdditionalBytes > nPrune) {
-            if (!PruneBlockFiles())
-                return AbortNode("Can't keep block files size as low as requested", _("Can't keep block files size as low as requested"));
+            if (!PruneBlockFiles()) {
+                LogPrintf("Warning: Can't keep block files size as low as requested\n");
+                break;
+            }
         }
     }
 
