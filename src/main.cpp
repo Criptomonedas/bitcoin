@@ -2779,8 +2779,9 @@ bool PruneBlockFiles()
     } else if (undoPrunable < dataPrunable) {
         fFileRemoved = RemoveUndoFile(undoPrunable);
     } else
-        fFileRemoved = (RemoveBlockFile(dataPrunable) || RemoveUndoFile(undoPrunable));
+        fFileRemoved = (RemoveBlockFile(dataPrunable) | RemoveUndoFile(undoPrunable));
     if (fFileRemoved) {
+        CheckBlockFiles();
         return true;
     }
     return false;
