@@ -2772,18 +2772,15 @@ bool PruneBlockFiles()
         LogPrintf("There's nothing to prune.\n");
         return false;
     }
-    bool fTrue = false;
+    bool fFileRemoved = false;
     int dataPrunable = *setDataFilePrunable.begin(), undoPrunable = *setUndoFilePrunable.begin();
     if (dataPrunable < undoPrunable) {
-        if (RemoveBlockFile(dataPrunable))
-            fTrue = true;
+        fFileRemoved = RemoveBlockFile(dataPrunable);
     } else if (undoPrunable < dataPrunable) {
-        if (RemoveUndoFile(undoPrunable))
-           fTrue = true;
-    } else if (RemoveBlockFile(dataPrunable) && RemoveUndoFile(undoPrunable))
-        fTrue = true;
-    if (fTrue) {
-        CheckBlockFiles();
+        fFileRemoved = RemoveUndoFile(undoPrunable);
+    } else
+        fFileRemoved = (RemoveBlockFile(dataPrunable) || RemoveUndoFile(undoPrunable));
+    if (fFileRemoved) {
         return true;
     }
     return false;
@@ -3011,7 +3008,7 @@ bool CheckBlockFiles()
     setDataFilePrunable.clear();
     setUndoFilePrunable.clear();
     for (CBlockIndex* pindex = chainActive.Tip(); pindex && pindex->pprev; pindex = pindex->pprev) {
-        bool fWrite = false;
+        bool fWriteIndex = false;
         if (pindex->nHeight > nKeepMinBlksFromHeight) {
             if (!(pindex->nStatus & BLOCK_HAVE_DATA) || !(pindex->nStatus & BLOCK_HAVE_UNDO)) { // Fail immediately if required data is missing
                 LogPrintf("Error: Required data for block: %i is missing.\n", pindex->nHeight);
@@ -3028,7 +3025,7 @@ bool CheckBlockFiles()
                     }
                 } else {
                     pindex->nStatus &= ~BLOCK_HAVE_DATA;
-                    fWrite = true;
+                    fWriteIndex = true;
                 }
             }
             if (pindex->nStatus & BLOCK_HAVE_UNDO) {
@@ -3038,11 +3035,11 @@ bool CheckBlockFiles()
                     }
                 } else {
                     pindex->nStatus &= ~BLOCK_HAVE_UNDO;
-                    fWrite = true;
+                    fWriteIndex = true;
                 }
             }
         }
-        if (fWrite) {
+        if (fWriteIndex) {
             CDiskBlockIndex blockindex(pindex);
             if (!pblocktree->WriteBlockIndex(blockindex))
                 return false;
