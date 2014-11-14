@@ -1289,8 +1289,10 @@ bool AppInit2(boost::thread_group& threadGroup)
     LogPrintf("mapAddressBook.size() = %u\n",  pwalletMain ? pwalletMain->mapAddressBook.size() : 0);
 #endif
 
-    if (nPrune) // unsetting NODE_NETWORK on prune state
+    if (nPrune) {
+        LogPrintf("Unsetting NODE_NETWORK on prune mode\n");
         nLocalServices &= ~NODE_NETWORK;
+    }
     StartNode(threadGroup);
 
 #ifdef ENABLE_WALLET
