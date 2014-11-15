@@ -2733,7 +2733,12 @@ void ClearUndoFileInfo(int nFile)
         AbortNode("Error Writing Block Info\n");
 }
 
-bool RemoveDiskFile(int nFile, bool blockOrUndo)
+enum BlockOrUndo {
+    BLOCK = false,
+    UNDO = true
+};
+
+bool RemoveDiskFile(int nFile, BlockOrUndo blockOrUndo)
 {
     LOCK(cs_main);
     CDiskBlockPos pos(nFile, 0);
@@ -2749,12 +2754,12 @@ bool RemoveDiskFile(int nFile, bool blockOrUndo)
 
 bool RemoveBlockFile(int nFile)
 {
-    return RemoveDiskFile(nFile, 0);
+    return RemoveDiskFile(nFile, BLOCK);
 }
 
 bool RemoveUndoFile(int nFile)
 {
-    return RemoveDiskFile(nFile, 1);
+    return RemoveDiskFile(nFile, UNDO);
 }
 
 
