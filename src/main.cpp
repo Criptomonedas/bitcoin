@@ -2797,8 +2797,7 @@ void ClearBlockFileInfo(int nFile)
         vinfoBlockFile[nFile].nSize = 0;
     else
         vinfoBlockFile[nFile].SetNull();
-    if (!pblocktree->WriteBlockFileInfo(nFile, vinfoBlockFile[nFile]))
-        AbortNode("Error Writing Block Info\n");
+    setDirtyFileInfo.insert(nFile);
 }
 
 void ClearUndoFileInfo(int nFile)
@@ -2808,8 +2807,7 @@ void ClearUndoFileInfo(int nFile)
         vinfoBlockFile[nFile].nUndoSize = 0;
     else
         vinfoBlockFile[nFile].SetNull();
-    if (!pblocktree->WriteBlockFileInfo(nFile, vinfoBlockFile[nFile]))
-        AbortNode("Error Writing Block Info\n");
+    setDirtyFileInfo.insert(nFile);
 }
 
 enum BlockOrUndo {
@@ -3087,7 +3085,6 @@ bool CheckBlockFiles()
     setDataFilePrunable.clear();
     setUndoFilePrunable.clear();
     for (CBlockIndex* pindex = chainActive.Tip(); pindex && pindex->pprev; pindex = pindex->pprev) {
-        bool fWriteIndex = false;
         if (pindex->nHeight > nKeepMinBlksFromHeight) {
             if (!(pindex->nStatus & BLOCK_HAVE_DATA) || !(pindex->nStatus & BLOCK_HAVE_UNDO)) { // Fail immediately if required data is missing
                 LogPrintf("Error: Required data for block: %i is missing.\n", pindex->nHeight);
@@ -3104,7 +3101,7 @@ bool CheckBlockFiles()
                     }
                 } else {
                     pindex->nStatus &= ~BLOCK_HAVE_DATA;
-                    fWriteIndex = true;
+                    setDirtyBlockIndex.insert(pindex);
                 }
             }
             if (pindex->nStatus & BLOCK_HAVE_UNDO) {
@@ -3114,14 +3111,9 @@ bool CheckBlockFiles()
                     }
                 } else {
                     pindex->nStatus &= ~BLOCK_HAVE_UNDO;
-                    fWriteIndex = true;
+                    setDirtyBlockIndex.insert(pindex);
                 }
             }
-        }
-        if (fWriteIndex) {
-            CDiskBlockIndex blockindex(pindex);
-            if (!pblocktree->WriteBlockIndex(blockindex))
-                return false;
         }
         if (~pindex->nStatus & BLOCK_HAVE_DATA && pindex->nStatus & BLOCK_VALID_CHAIN)
             setDataPruned.insert(pindex->nHeight);
