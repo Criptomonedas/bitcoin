@@ -3114,7 +3114,7 @@ bool static LoadBlockIndexDB()
 bool BlockFileIsOpenable(int nFile)
 {
     CDiskBlockPos pos(nFile, 0);
-    if (!vinfoBlockFile[nFile].nSize && !boost::filesystem::exists(GetBlockPosFilename(pos, "blk")))
+    if (!vinfoBlockFile[nFile].nSize)
         return false;
     if (CAutoFile(OpenBlockFile(pos, true), SER_DISK, CLIENT_VERSION).IsNull()) {
         ClearBlockFileInfo(nFile);
@@ -3126,7 +3126,7 @@ bool BlockFileIsOpenable(int nFile)
 bool UndoFileIsOpenable(int nFile)
 {
     CDiskBlockPos pos(nFile, 0);
-    if (!vinfoBlockFile[nFile].nUndoSize && !boost::filesystem::exists(GetBlockPosFilename(pos, "rev")))
+    if (!vinfoBlockFile[nFile].nUndoSize)
         return false;
     if (CAutoFile(OpenUndoFile(pos, true), SER_DISK, CLIENT_VERSION).IsNull()) {
         ClearUndoFileInfo(nFile);
